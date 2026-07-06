@@ -1,0 +1,3 @@
+# Shell scripts are executed on Linux hosts via `curl | bash`.
+# Force LF so they never get CRLF line endings that break bash.
+*.sh text eol=lf
