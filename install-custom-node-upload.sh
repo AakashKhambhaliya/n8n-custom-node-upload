@@ -245,26 +245,30 @@ function api(p,o){o=o||{};o.headers=Object.assign({'content-type':'application/j
 return fetch(p,o).then(function(r){return r.json().then(function(j){
 if(!r.ok){if(r.status===403)sessionStorage.removeItem('customNodeToken');throw new Error(j.error||('HTTP '+r.status));}return j;});});}
 function el(t,c,x){var e=document.createElement(t);if(c)e.style.cssText=c;if(x)e.textContent=x;return e;}
+/* Styled entirely with n8n's own design tokens (CSS variables) so it
+   matches the active theme (light OR dark) and n8n's typography/spacing. */
 function build(){
-var w=el('div','border-top:1px solid #dbdfe7;margin-top:14px;padding-top:14px;');w.setAttribute(MARK,'1');
-var ti=el('div','font-size:13px;font-weight:600;margin-bottom:4px;color:#31353e;','Upload your own node (.tgz)');
-var h=el('div','font-size:12px;color:#7d8496;margin-bottom:10px;','Built with `npm pack`. Installs as a normal community node — uninstall/manage it in this list like any other.');
-var f=el('input');f.type='file';f.accept='.tgz,.tar.gz';f.style.cssText='font-size:12px;margin-bottom:10px;display:block;';
-var b=el('button','background:#ff6d5a;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;','Upload & install');
-var out=el('div','font-size:12px;margin-top:10px;white-space:pre-wrap;color:#555c6e;');
+var w=el('div','border-top:1px solid var(--color-foreground-base);margin-top:var(--spacing-s);padding-top:var(--spacing-s);');w.setAttribute(MARK,'1');
+var ti=el('div','font-size:var(--font-size-2xs);font-weight:var(--font-weight-bold,600);margin-bottom:var(--spacing-5xs);color:var(--color-text-dark);','Upload your own node (.tgz)');
+var h=el('div','font-size:var(--font-size-2xs);color:var(--color-text-light);line-height:1.4;margin-bottom:var(--spacing-2xs);','Built with `npm pack`. Installs as a normal community node — uninstall/manage it in this list like any other.');
+var f=el('input');f.type='file';f.accept='.tgz,.tar.gz';f.style.cssText='font-size:var(--font-size-2xs);color:var(--color-text-base);margin-bottom:var(--spacing-2xs);display:block;max-width:100%;';
+var b=el('button','background:var(--color-primary);color:#fff;border:1px solid var(--color-primary);border-radius:var(--border-radius-base);padding:var(--spacing-2xs) var(--spacing-s);font-size:var(--font-size-2xs);font-weight:var(--font-weight-bold,600);cursor:pointer;line-height:1;','Upload & install');
+b.onmouseenter=function(){b.style.background=b.style.borderColor='var(--color-primary-shade-1)';};
+b.onmouseleave=function(){b.style.background=b.style.borderColor='var(--color-primary)';};
+var out=el('div','font-size:var(--font-size-2xs);margin-top:var(--spacing-2xs);white-space:pre-wrap;color:var(--color-text-base);line-height:1.4;');
 b.onclick=function(){var file=f.files&&f.files[0];
 if(!file){out.textContent='Choose a .tgz file first.';return;}
 b.disabled=true;b.textContent='Installing…';
 var rd=new FileReader();rd.onload=function(){
 api('/rest/custom-nodes/install',{method:'POST',body:JSON.stringify({filename:file.name,data:String(rd.result).split(',')[1]})})
-.then(function(r){out.style.color='#29a568';
+.then(function(r){out.style.color='var(--color-success)';
 out.textContent='✔ Installed '+r.package+' v'+r.version+' ('+r.nodes+' node(s)). '+r.note;
 if(r.native){setTimeout(function(){location.reload();},2500);}
-else{var rb=el('button','margin-top:8px;background:#fff;border:1px solid #dbdfe7;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;display:block;','Restart n8n now');
+else{var rb=el('button','margin-top:var(--spacing-2xs);background:var(--color-background-xlight);border:1px solid var(--color-foreground-base);border-radius:var(--border-radius-base);padding:var(--spacing-3xs) var(--spacing-2xs);font-size:var(--font-size-2xs);color:var(--color-text-base);cursor:pointer;display:block;','Restart n8n now');
 rb.onclick=function(){rb.disabled=true;rb.textContent='Restarting… page will reload';
 api('/rest/custom-nodes/restart',{method:'POST',body:'{}'}).catch(function(){}).finally(function(){setTimeout(function(){location.reload();},7000);});};
 out.appendChild(rb);}})
-.catch(function(e){out.style.color='#c0392b';out.textContent='✖ '+e.message;})
+.catch(function(e){out.style.color='var(--color-danger)';out.textContent='✖ '+e.message;})
 .finally(function(){b.disabled=false;b.textContent='Upload & install';});};
 rd.readAsDataURL(file);};
 w.appendChild(ti);w.appendChild(h);w.appendChild(f);w.appendChild(b);w.appendChild(out);return w;}
@@ -288,14 +292,23 @@ docker cp "$TMP/custom-node-ui.js"    "$CONTAINER:/home/node/.n8n/hooks/"
 docker exec -u root "$CONTAINER" chown -R node:node /home/node/.n8n/hooks 2>/dev/null || true
 ok "Hook files installed (persist across updates — they live in the data volume)."
 
+# --- Reuse an existing admin token if the feature was installed before, so
+#     re-running (e.g. to update the UI) doesn't invalidate saved tokens.
+TOKEN=""
+if [ -n "$COMPOSE_DIR" ] && [ -f "$COMPOSE_DIR/docker-compose.override.yml" ]; then
+  TOKEN="$(grep -oE 'CUSTOM_NODE_ADMIN_TOKEN=[^[:space:]]+' "$COMPOSE_DIR/docker-compose.override.yml" 2>/dev/null | head -1 | cut -d= -f2 || true)"
+  [ -n "$TOKEN" ] && info "Reusing existing admin token (unchanged)."
+fi
 # --- FIX #3: portable random token. Prefer openssl; fall back to /dev/urandom
 #     via od; final fallback to the kernel's own hex source.
-if command -v openssl >/dev/null 2>&1; then
-  TOKEN="$(openssl rand -hex 32)"
-elif [ -r /dev/urandom ]; then
-  TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-else
-  TOKEN="$(head -c 64 /proc/sys/kernel/random/uuid | tr -d '-\n')$(date +%s)"
+if [ -z "$TOKEN" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    TOKEN="$(openssl rand -hex 32)"
+  elif [ -r /dev/urandom ]; then
+    TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  else
+    TOKEN="$(head -c 64 /proc/sys/kernel/random/uuid | tr -d '-\n')$(date +%s)"
+  fi
 fi
 [ -n "$TOKEN" ] || err "Could not generate an admin token."
 
