@@ -245,17 +245,28 @@ function api(p,o){o=o||{};o.headers=Object.assign({'content-type':'application/j
 return fetch(p,o).then(function(r){return r.json().then(function(j){
 if(!r.ok){if(r.status===403)sessionStorage.removeItem('customNodeToken');throw new Error(j.error||('HTTP '+r.status));}return j;});});}
 function el(t,c,x){var e=document.createElement(t);if(c)e.style.cssText=c;if(x)e.textContent=x;return e;}
-/* Styled entirely with n8n's own design tokens (CSS variables) so it
-   matches the active theme (light OR dark) and n8n's typography/spacing. */
-function build(){
-var w=el('div','border-top:1px solid var(--color-foreground-base);margin-top:var(--spacing-s);padding-top:var(--spacing-s);');w.setAttribute(MARK,'1');
-var ti=el('div','font-size:var(--font-size-2xs);font-weight:var(--font-weight-bold,600);margin-bottom:var(--spacing-5xs);color:var(--color-text-dark);','Upload your own node (.tgz)');
-var h=el('div','font-size:var(--font-size-2xs);color:var(--color-text-light);line-height:1.4;margin-bottom:var(--spacing-2xs);','Built with `npm pack`. Installs as a normal community node — uninstall/manage it in this list like any other.');
-var f=el('input');f.type='file';f.accept='.tgz,.tar.gz';f.style.cssText='font-size:var(--font-size-2xs);color:var(--color-text-base);margin-bottom:var(--spacing-2xs);display:block;max-width:100%;';
-var b=el('button','background:var(--color-primary);color:#fff;border:1px solid var(--color-primary);border-radius:var(--border-radius-base);padding:var(--spacing-2xs) var(--spacing-s);font-size:var(--font-size-2xs);font-weight:var(--font-weight-bold,600);cursor:pointer;line-height:1;','Upload & install');
-b.onmouseenter=function(){b.style.background=b.style.borderColor='var(--color-primary-shade-1)';};
-b.onmouseleave=function(){b.style.background=b.style.borderColor='var(--color-primary)';};
-var out=el('div','font-size:var(--font-size-2xs);margin-top:var(--spacing-2xs);white-space:pre-wrap;color:var(--color-text-base);line-height:1.4;');
+/* Text uses n8n design tokens (they resolve); the button is CLONED from
+   n8n's own Install button in the same modal so it is pixel-identical and
+   theme-correct on every n8n version, regardless of which tokens exist. */
+function findBtn(scope,label){var bs=scope.querySelectorAll('button'),any=null;
+for(var i=0;i<bs.length;i++){if(!any)any=bs[i];
+if((bs[i].textContent||'').trim().toLowerCase()===label)return bs[i];}return any;}
+function mkBtn(scope,label,template){var tpl=findBtn(scope,template);
+if(tpl){var b=tpl.cloneNode(true);
+b.disabled=false;b.removeAttribute('disabled');b.removeAttribute('aria-disabled');
+b.className=b.className.replace(/\b(is-disabled|disabled)\b/g,'');
+b.style.opacity='';b.style.pointerEvents='';b.style.cursor='pointer';
+b.textContent=label;b.onclick=null;return b;}
+/* fallback if no template button found */
+var f2=el('button','background:var(--color-primary,#ff6d5a);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;',label);
+return f2;}
+function build(scope){
+var w=el('div','border-top:1px solid var(--color-foreground-base,#3a3a42);margin-top:var(--spacing-s,14px);padding-top:var(--spacing-s,14px);');w.setAttribute(MARK,'1');
+var ti=el('div','font-size:var(--font-size-2xs,13px);font-weight:var(--font-weight-bold,600);margin-bottom:var(--spacing-5xs,4px);color:var(--color-text-dark,#e1e1e6);','Upload your own node (.tgz)');
+var h=el('div','font-size:var(--font-size-2xs,12px);color:var(--color-text-light,#9a9aa5);line-height:1.4;margin-bottom:var(--spacing-2xs,10px);','Built with `npm pack`. Installs as a normal community node — uninstall/manage it in this list like any other.');
+var f=el('input');f.type='file';f.accept='.tgz,.tar.gz';f.style.cssText='font-size:var(--font-size-2xs,12px);color:var(--color-text-base,#c3c3c9);margin-bottom:var(--spacing-2xs,10px);display:block;max-width:100%;';
+var b=mkBtn(scope,'Upload & install','install');
+var out=el('div','font-size:var(--font-size-2xs,12px);margin-top:var(--spacing-2xs,10px);white-space:pre-wrap;color:var(--color-text-base,#c3c3c9);line-height:1.4;');
 b.onclick=function(){var file=f.files&&f.files[0];
 if(!file){out.textContent='Choose a .tgz file first.';return;}
 b.disabled=true;b.textContent='Installing…';
@@ -264,7 +275,7 @@ api('/rest/custom-nodes/install',{method:'POST',body:JSON.stringify({filename:fi
 .then(function(r){out.style.color='var(--color-success)';
 out.textContent='✔ Installed '+r.package+' v'+r.version+' ('+r.nodes+' node(s)). '+r.note;
 if(r.native){setTimeout(function(){location.reload();},2500);}
-else{var rb=el('button','margin-top:var(--spacing-2xs);background:var(--color-background-xlight);border:1px solid var(--color-foreground-base);border-radius:var(--border-radius-base);padding:var(--spacing-3xs) var(--spacing-2xs);font-size:var(--font-size-2xs);color:var(--color-text-base);cursor:pointer;display:block;','Restart n8n now');
+else{var rb=mkBtn(scope,'Restart n8n now','browse');rb.style.display='block';rb.style.marginTop='var(--spacing-2xs,10px)';
 rb.onclick=function(){rb.disabled=true;rb.textContent='Restarting… page will reload';
 api('/rest/custom-nodes/restart',{method:'POST',body:'{}'}).catch(function(){}).finally(function(){setTimeout(function(){location.reload();},7000);});};
 out.appendChild(rb);}})
@@ -277,7 +288,7 @@ var ds=document.querySelectorAll('[role="dialog"], .el-dialog, [class*="modal"]'
 for(var i=0;i<ds.length;i++){var d=ds[i];if(d.offsetParent===null)continue;
 var t=(d.textContent||'').toLowerCase();
 if(t.indexOf('community node')!==-1&&t.indexOf('npm')!==-1){
-(d.querySelector('[class*="content"], [class*="body"]')||d).appendChild(build());return;}}}
+(d.querySelector('[class*="content"], [class*="body"]')||d).appendChild(build(d));return;}}}
 window.n8nExternalHooks=window.n8nExternalHooks||{};
 var ns=window.n8nExternalHooks.settingsCommunityNodesView=window.n8nExternalHooks.settingsCommunityNodesView||{};
 ns.openInstallModal=(ns.openInstallModal||[]).concat([function(){setTimeout(inject,300);setTimeout(inject,900);}]);
